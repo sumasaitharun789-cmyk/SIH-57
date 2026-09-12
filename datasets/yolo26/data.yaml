@@ -1,0 +1,8 @@
+path: D:/SIH-57/datasets/yolo26
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: shipwreck
