@@ -15,10 +15,12 @@ import {
 } from 'lucide-react';
 import StatCard from './StatCard';
 import { MissionStats, TelemetryData } from '../lib/types';
+import { BackendDashboardSummary } from '../lib/api';
 
 interface MissionOverviewProps {
   stats: MissionStats;
   telemetry: TelemetryData;
+  summary?: BackendDashboardSummary | null;
   onNavigate: (
     section: 'sonar' | 'detection' | 'fusion' | 'database' | 'geo' | 'upload'
   ) => void;
@@ -27,6 +29,7 @@ interface MissionOverviewProps {
 export default function MissionOverview({
   stats,
   telemetry,
+  summary,
   onNavigate,
 }: MissionOverviewProps) {
   return (
@@ -42,6 +45,12 @@ export default function MissionOverview({
             <span className="hidden sm:inline-block text-[11px] font-mono-code text-slate-400">
               Coromandel Coastal Hydrographic Survey
             </span>
+            {summary && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-mono-code px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/80 text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                FASTAPI SYNCED ({summary.total_detections} DETECTIONS)
+              </span>
+            )}
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
@@ -98,9 +107,9 @@ export default function MissionOverview({
 
         <StatCard
           label="ANOMALIES DETECTED"
-          value={stats.anomaliesDetected}
+          value={summary ? summary.total_detections : stats.anomaliesDetected}
           icon={AlertTriangle}
-          trend={{ value: '+3 in Sector 07', isPositive: false }}
+          trend={{ value: summary ? `${summary.completed_detections} verified in DB` : '+3 in Sector 07', isPositive: false }}
           accentColor="amber"
           subLabel="Total Target Contacts"
           delay={0.1}
@@ -108,7 +117,7 @@ export default function MissionOverview({
 
         <StatCard
           label="HIGH PRIORITY"
-          value={stats.highPriorityCount}
+          value={summary ? summary.risk_distribution.high : stats.highPriorityCount}
           prefix="0"
           icon={Flame}
           trend={{ value: 'Ghost Nets & Ordnance', isPositive: false }}

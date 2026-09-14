@@ -16,8 +16,12 @@ __pycache__/
 venv/
 .venv/
 
-# Environment files
+# Environment & Data files
 *.env*
+*.db
+*.sqlite3
+backend/uploads/
+uploads/
 
 # IDE & OS
 .vscode/

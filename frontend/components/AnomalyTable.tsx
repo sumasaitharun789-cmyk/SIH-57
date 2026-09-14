@@ -11,6 +11,8 @@ import {
   AlertCircle,
   Database,
   ExternalLink,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { Detection, PriorityLevel, VerificationStatus } from '../lib/types';
 
@@ -19,6 +21,9 @@ interface AnomalyTableProps {
   selectedDetection: Detection | null;
   onSelectDetection: (detection: Detection) => void;
   onOpenDetailsModal: (detection: Detection) => void;
+  isLoading?: boolean;
+  onRefresh?: () => void;
+  error?: string | null;
 }
 
 type SortField = 'id' | 'confidence' | 'depth' | 'timestamp' | 'fusedConfidence';
@@ -28,6 +33,9 @@ export default function AnomalyTable({
   selectedDetection,
   onSelectDetection,
   onOpenDetailsModal,
+  isLoading,
+  onRefresh,
+  error,
 }: AnomalyTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
@@ -142,15 +150,47 @@ export default function AnomalyTable({
           </p>
         </div>
 
-        {/* Action button */}
-        <button
-          onClick={handleExportCSV}
-          className="flex items-center gap-2 rounded-lg border border-cyan-700/50 bg-cyan-950/40 px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 transition-colors shrink-0"
-        >
-          <Download className="h-4 w-4" />
-          <span>EXPORT CSV / GIS</span>
-        </button>
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 rounded-lg border border-cyan-800/60 bg-cyan-950/40 px-3 py-2 text-xs font-semibold text-cyan-300 hover:border-cyan-500 hover:bg-cyan-900/40 transition-colors disabled:opacity-50"
+              title="Sync detections from FastAPI SQLite database"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>SYNC DATABASE</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 rounded-lg border border-cyan-700/50 bg-cyan-950/40 px-3.5 py-2 text-xs font-semibold text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 transition-colors"
+          >
+            <Download className="h-4 w-4" />
+            <span>EXPORT CSV / GIS</span>
+          </button>
+        </div>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="flex items-center justify-between rounded-lg border border-red-900/80 bg-red-950/40 p-3 text-xs text-red-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+            <span>{error}</span>
+          </div>
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="underline text-red-200 hover:text-white text-xs font-mono-code"
+            >
+              Retry Sync
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -243,7 +283,28 @@ export default function AnomalyTable({
           </thead>
 
           <tbody className="divide-y divide-slate-800/60 text-slate-300">
-            {filteredDetections.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Loader2 className="h-6 w-6 text-cyan-400 animate-spin" />
+                    <span className="text-xs font-mono-code">Syncing anomaly records from SQLite database...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : detections.length === 0 ? (
+              <tr>
+                <td colSpan={9} className="px-4 py-12 text-center text-slate-400">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Database className="h-8 w-8 text-slate-600" />
+                    <span className="text-sm font-bold text-slate-300">NO ANOMALY RECORDS IN DATABASE</span>
+                    <span className="text-xs text-slate-500 max-w-sm">
+                      No side-scan sonar contacts have been logged yet. Upload a sonar image in the &quot;Upload Sonar&quot; module to run ML detection.
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            ) : filteredDetections.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                   No anomaly contacts match your current search criteria.

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -19,15 +19,65 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
 } from 'recharts';
-import { BarChart3, TrendingUp, Filter, ShieldCheck, Activity } from 'lucide-react';
+import { BarChart3, TrendingUp, Filter, ShieldCheck, Activity, RefreshCw, AlertTriangle, ShieldAlert } from 'lucide-react';
 import {
   mockScanTimeSeries,
   mockCategoryDistribution,
   mockSurveySectors,
 } from '../lib/mockData';
+import { BackendDashboardSummary } from '../lib/api';
+import { Detection } from '../lib/types';
 
-export default function MissionAnalytics() {
+interface MissionAnalyticsProps {
+  summary?: BackendDashboardSummary | null;
+  detections?: Detection[];
+  onRefresh?: () => void;
+  isLoading?: boolean;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  ghost_net: '#ef4444',
+  'ghost net': '#ef4444',
+  metal_object: '#06b6d4',
+  'metal object': '#06b6d4',
+  plastic_debris: '#a855f7',
+  'plastic debris': '#a855f7',
+  tire: '#f59e0b',
+  'tire / rubber': '#f59e0b',
+  rock: '#10b981',
+  'rock / natural feature': '#10b981',
+  munitions: '#f43f5e',
+  unknown: '#64748b',
+};
+
+const PALETTE = ['#22d3ee', '#f59e0b', '#ef4444', '#10b981', '#a855f7', '#38bdf8', '#fb923c'];
+
+export default function MissionAnalytics({
+  summary,
+  detections,
+  onRefresh,
+  isLoading,
+}: MissionAnalyticsProps) {
   const [timeFilter, setTimeFilter] = useState<'MISSION' | 'DAILY' | 'SURVEY'>('MISSION');
+
+  // Compute live category distribution from summary or fallback
+  const categoryData = useMemo(() => {
+    if (summary?.predictions && summary.predictions.length > 0) {
+      const total = summary.predictions.reduce((acc, p) => acc + p.count, 0) || 1;
+      return summary.predictions.map((p, idx) => {
+        const predKey = p.prediction.toLowerCase();
+        const color = CATEGORY_COLORS[predKey] || PALETTE[idx % PALETTE.length];
+        const name = p.prediction.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+        return {
+          name,
+          count: p.count,
+          percentage: Math.round((p.count / total) * 100),
+          color,
+        };
+      });
+    }
+    return mockCategoryDistribution;
+  }, [summary]);
 
   // Radar chart data for evidence channel performance
   const radarData = [
@@ -49,29 +99,78 @@ export default function MissionAnalytics() {
             <h2 className="text-lg font-bold text-white tracking-tight">
               MISSION ANALYTICS & ACOUSTIC TELEMETRY
             </h2>
+            {summary && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-mono-code px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-800/80 text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                SQLITE LIVE
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-400 mt-1">
             Real-time ping throughput, anomaly occurrence frequency, and multi-factor performance metrics.
           </p>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center rounded-lg border border-slate-800 bg-slate-950/80 p-1 text-xs font-mono-code">
-          {(['DAILY', 'MISSION', 'SURVEY'] as const).map((filter) => (
+        {/* Filter Tabs & Sync Button */}
+        <div className="flex items-center gap-2">
+          {onRefresh && (
             <button
-              key={filter}
-              onClick={() => setTimeFilter(filter)}
-              className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
-                timeFilter === filter
-                  ? 'bg-cyan-500 text-slate-950 shadow'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-cyan-800/60 bg-cyan-950/40 text-cyan-300 text-xs font-mono-code hover:border-cyan-500 transition-colors disabled:opacity-50"
+              title="Refresh mission analytics from FastAPI backend"
             >
-              {filter}
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              <span>SYNC</span>
             </button>
-          ))}
+          )}
+
+          <div className="flex items-center rounded-lg border border-slate-800 bg-slate-950/80 p-1 text-xs font-mono-code">
+            {(['DAILY', 'MISSION', 'SURVEY'] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setTimeFilter(filter)}
+                className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${
+                  timeFilter === filter
+                    ? 'bg-cyan-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {filter}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Backend Live Metrics Strip */}
+      {summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono-code">
+          <div className="rounded-lg border border-cyan-950/80 bg-[#0a1628]/80 p-3">
+            <span className="text-[10px] text-slate-400 uppercase">DATABASE DETECTIONS</span>
+            <div className="text-lg font-bold text-cyan-300 mt-1">{summary.total_detections}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">{summary.completed_detections} completed • {summary.processing_detections} active</div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-950/80 bg-[#0a1628]/80 p-3">
+            <span className="text-[10px] text-slate-400 uppercase">HIGH RISK CONTACTS</span>
+            <div className="text-lg font-bold text-red-400 mt-1">{summary.risk_distribution.high}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">{summary.risk_distribution.medium} medium • {summary.risk_distribution.low} low</div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-950/80 bg-[#0a1628]/80 p-3">
+            <span className="text-[10px] text-slate-400 uppercase">ASSESSMENT REPORTS</span>
+            <div className="text-lg font-bold text-emerald-400 mt-1">{summary.total_reports}</div>
+            <div className="text-[10px] text-slate-500 mt-0.5">IHO S-44 Compliant</div>
+          </div>
+
+          <div className="rounded-lg border border-cyan-950/80 bg-[#0a1628]/80 p-3">
+            <span className="text-[10px] text-slate-400 uppercase">SERVER ENGINE</span>
+            <div className="text-lg font-bold text-slate-100 mt-1">FASTAPI + ML</div>
+            <div className="text-[10px] text-emerald-400 mt-0.5">REST API Connected</div>
+          </div>
+        </div>
+      )}
 
       {/* Row 1: Acoustic Pings & Anomaly Trends */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -196,7 +295,7 @@ export default function MissionAnalytics() {
             <ResponsiveContainer width="100%" height="100%">
               <RechartsPie>
                 <Pie
-                  data={mockCategoryDistribution}
+                  data={categoryData}
                   cx="50%"
                   cy="50%"
                   innerRadius={50}
@@ -204,7 +303,7 @@ export default function MissionAnalytics() {
                   paddingAngle={4}
                   dataKey="count"
                 >
-                  {mockCategoryDistribution.map((entry, index) => (
+                  {categoryData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -221,7 +320,7 @@ export default function MissionAnalytics() {
           </div>
 
           <div className="grid grid-cols-2 gap-2 text-[10px] font-mono-code mt-2">
-            {mockCategoryDistribution.map((item) => (
+            {categoryData.map((item) => (
               <div key={item.name} className="flex items-center gap-1.5">
                 <span
                   className="h-2 w-2 rounded-full shrink-0"

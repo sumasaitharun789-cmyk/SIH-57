@@ -16,9 +16,15 @@ import { playSonarPing } from '../lib/audioUtils';
 
 interface LandingIntroProps {
   onEnterDashboard: () => void;
+  onOpenAuth?: () => void;
+  isAuthenticated?: boolean;
 }
 
-export default function LandingIntro({ onEnterDashboard }: LandingIntroProps) {
+export default function LandingIntro({
+  onEnterDashboard,
+  onOpenAuth,
+  isAuthenticated = false,
+}: LandingIntroProps) {
   const handleEnter = () => {
     playSonarPing(980, 0.6);
     onEnterDashboard();
@@ -118,9 +124,19 @@ export default function LandingIntro({ onEnterDashboard }: LandingIntroProps) {
             onClick={handleEnter}
             className="group flex items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-cyan-500 to-cyan-400 px-8 py-3.5 text-sm font-black text-slate-950 shadow-[0_0_25px_rgba(34,211,238,0.4)] hover:shadow-[0_0_35px_rgba(34,211,238,0.6)] hover:scale-105 active:scale-95 transition-all"
           >
-            <span>ENTER MISSION CONTROL</span>
+            <span>{isAuthenticated ? 'RESUME MISSION CONTROL' : 'ENTER MISSION CONTROL'}</span>
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
           </button>
+
+          {!isAuthenticated && onOpenAuth && (
+            <button
+              onClick={onOpenAuth}
+              className="flex items-center justify-center gap-2 rounded-xl border border-cyan-600/50 bg-cyan-950/40 px-6 py-3.5 text-sm font-mono-code font-bold text-cyan-300 hover:bg-cyan-900/40 hover:border-cyan-400 transition-all active:scale-95"
+            >
+              <ShieldCheck className="h-4 w-4 text-cyan-400" />
+              <span>OPERATOR LOGIN / REGISTER</span>
+            </button>
+          )}
         </div>
 
         <div className="mt-8 text-[11px] font-mono-code text-slate-500">

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -14,8 +14,11 @@ import {
   Clock,
   Sparkles,
   Radio,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Detection } from '../lib/types';
+import { api, BackendDetectionResponse } from '../lib/api';
 
 interface DetectionModalProps {
   detection: Detection | null;
@@ -30,6 +33,27 @@ export default function DetectionModal({
   onClose,
   onViewOnMap,
 }: DetectionModalProps) {
+  const [serverDetail, setServerDetail] = useState<BackendDetectionResponse | null>(null);
+  const [isLoadingServerDetail, setIsLoadingServerDetail] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && detection) {
+      const numId = parseInt(detection.id.replace(/\D/g, ''), 10);
+      if (!isNaN(numId) && numId > 0 && api.auth.isAuthenticated()) {
+        setIsLoadingServerDetail(true);
+        api.detections
+          .get(numId)
+          .then((data) => setServerDetail(data))
+          .catch(() => setServerDetail(null))
+          .finally(() => setIsLoadingServerDetail(false));
+      } else {
+        setServerDetail(null);
+      }
+    } else {
+      setServerDetail(null);
+    }
+  }, [isOpen, detection]);
+
   if (!isOpen || !detection) return null;
 
   const priorityStyles = {
@@ -62,6 +86,18 @@ export default function DetectionModal({
               <span className="text-[10px] font-mono-code px-2 py-0.5 rounded bg-emerald-950 border border-emerald-600 text-emerald-300">
                 {detection.status}
               </span>
+              {isLoadingServerDetail && (
+                <span className="flex items-center gap-1 text-[10px] font-mono-code text-cyan-400">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <span>Syncing...</span>
+                </span>
+              )}
+              {serverDetail && (
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono-code px-2 py-0.5 rounded bg-cyan-950/80 border border-cyan-700/60 text-cyan-300">
+                  <Sparkles className="h-2.5 w-2.5 text-cyan-400" />
+                  FASTAPI RECORD #{serverDetail.id}
+                </span>
+              )}
             </div>
 
             <button
@@ -176,10 +212,24 @@ export default function DetectionModal({
                 </div>
               </div>
 
-              <p className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800/80">
-                &ldquo;{detection.evidence.notes}&rdquo;
+              <p className="text-[11px] text-slate-300 italic pt-1 border-t border-slate-800/80">
+                &ldquo;{serverDetail?.risk_reason || detection.evidence.notes}&rdquo;
               </p>
             </div>
+
+            {/* Server ML Detections if available */}
+            {serverDetail?.detections && serverDetail.detections.length > 0 && (
+              <div className="rounded-xl border border-cyan-950/90 bg-slate-950/70 p-4 space-y-2 font-mono-code text-xs">
+                <span className="text-[10px] font-bold text-cyan-400 uppercase">SERVER ML MODEL DETECTIONS</span>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {serverDetail.detections.map((d, i) => (
+                    <span key={i} className="px-2 py-1 rounded bg-cyan-950/80 border border-cyan-800 text-cyan-300 text-[11px]">
+                      {d.label}: {Math.round(Number(d.confidence) * 100)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Dimensions and Recommendation */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -208,7 +258,7 @@ export default function DetectionModal({
           {/* Modal Footer CTAs */}
           <div className="flex items-center justify-between border-t border-cyan-950/80 bg-[#060e1e] px-6 py-4">
             <span className="text-xs font-mono-code text-slate-400">
-              Coordinates: {detection.coordinates.lat.toFixed(4)}°N, {detection.coordinates.lng.toFixed(4)}°E
+              Coordinates: {((serverDetail?.latitude ?? detection.coordinates.lat)).toFixed(4)}°N, {((serverDetail?.longitude ?? detection.coordinates.lng)).toFixed(4)}°E
             </span>
 
             <div className="flex items-center gap-3">

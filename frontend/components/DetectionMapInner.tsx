@@ -82,6 +82,7 @@ export default function DetectionMapInner({
 }: DetectionMapInnerProps) {
   const [showSwath, setShowSwath] = useState(true);
   const [showTrack, setShowTrack] = useState(true);
+  const [mapStyle, setMapStyle] = useState<'dark' | 'ocean'>('dark');
 
   // Survey route waypoints (Sector 07 Coromandel Coast)
   const surveyRoute: [number, number][] = [
@@ -145,6 +146,18 @@ export default function DetectionMapInner({
           >
             VESSEL TRACK
           </button>
+
+          <button
+            onClick={() => setMapStyle(mapStyle === 'dark' ? 'ocean' : 'dark')}
+            className={`px-2.5 py-1 rounded border text-[10px] font-semibold transition-colors ${
+              mapStyle === 'ocean'
+                ? 'bg-blue-950/70 border-blue-500/50 text-blue-300'
+                : 'bg-cyan-950/70 border-cyan-500/50 text-cyan-300'
+            }`}
+            title="Toggle between Tactical Dark Gray Canvas and Hydrographic Ocean Bathymetry"
+          >
+            {mapStyle === 'ocean' ? 'OCEAN BATHY' : 'TACTICAL DARK'}
+          </button>
         </div>
       </div>
 
@@ -156,11 +169,23 @@ export default function DetectionMapInner({
           scrollWheelZoom={true}
           className="h-full w-full"
         >
-          {/* CartoDB Dark Matter tiles */}
-          <TileLayer
-            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          />
+          {/* High-Contrast Watermark-Free Tactical Basemap */}
+          {process.env.NEXT_PUBLIC_CARTO_API_KEY ? (
+            <TileLayer
+              attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+              url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${process.env.NEXT_PUBLIC_CARTO_API_KEY}`}
+            />
+          ) : mapStyle === 'ocean' ? (
+            <TileLayer
+              attribution='&copy; <a href="https://www.esri.com/">Esri Ocean Basemap</a>'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}"
+            />
+          ) : (
+            <TileLayer
+              attribution='&copy; <a href="https://www.esri.com/">Esri Dark Canvas</a>'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}"
+            />
+          )}
 
           <MapController selectedDetection={selectedDetection} />
 
@@ -249,12 +274,26 @@ export default function DetectionMapInner({
                     <div className="text-[9px] text-emerald-400 font-bold">
                       STATUS: {det.status}
                     </div>
+
+                    <button
+                      onClick={() => onSelectDetection(det)}
+                      className="w-full mt-1 px-2 py-1 rounded bg-cyan-950 border border-cyan-800 text-cyan-300 text-[10px] font-bold hover:bg-cyan-900 hover:border-cyan-500 transition-colors"
+                    >
+                      INSPECT CONTACT &rarr;
+                    </button>
                   </div>
                 </Popup>
               </Marker>
             );
           })}
         </MapContainer>
+
+        {/* Zero contacts banner */}
+        {detections.length === 0 && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[400] px-4 py-2 rounded-lg bg-[#0a1628]/95 border border-cyan-900/80 backdrop-blur-md text-xs font-mono-code text-slate-300 shadow-xl pointer-events-none">
+            NO GEOSPATIAL TARGETS • UPLOAD SONAR TO LOG ANOMALY CONTACTS
+          </div>
+        )}
 
         {/* Legend Overlay in Bottom Right */}
         <div className="absolute bottom-4 right-4 z-[400] rounded-lg border border-cyan-900/60 bg-[#0a1628]/90 p-3 text-[11px] font-mono-code text-slate-300 backdrop-blur-md space-y-1.5 shadow-xl">

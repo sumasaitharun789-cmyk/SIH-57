@@ -13,9 +13,12 @@ import {
   Waves,
   Navigation,
   Menu,
+  LogOut,
+  LogIn,
 } from 'lucide-react';
 import { TelemetryData } from '../lib/types';
 import { toggleAudioMute, getAudioMuteState, playSonarPing } from '../lib/audioUtils';
+import { UserProfile } from '../lib/api';
 
 interface TopbarProps {
   telemetry: TelemetryData;
@@ -23,6 +26,9 @@ interface TopbarProps {
   onToggleSettings: () => void;
   onToggleSidebarMobile?: () => void;
   unreadAlertsCount: number;
+  currentUser?: UserProfile | null;
+  onOpenAuth?: () => void;
+  onLogout?: () => void;
 }
 
 export default function Topbar({
@@ -31,6 +37,9 @@ export default function Topbar({
   onToggleSettings,
   onToggleSidebarMobile,
   unreadAlertsCount,
+  currentUser,
+  onOpenAuth,
+  onLogout,
 }: TopbarProps) {
   const [timeStr, setTimeStr] = useState<string>('');
   const [isMuted, setIsMuted] = useState(false);
@@ -185,18 +194,59 @@ export default function Topbar({
         </button>
 
         {/* Operator Profile */}
-        <div className="flex items-center gap-2 pl-1 border-l border-slate-800/80">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-950/80 border border-cyan-700/50 text-cyan-300">
-            <User className="h-4 w-4" />
-          </div>
-          <div className="hidden xl:flex flex-col">
-            <span className="text-xs font-semibold text-slate-200 leading-tight">
-              Dr. Priya Raman
-            </span>
-            <span className="text-[10px] font-mono-code text-cyan-400 leading-tight">
-              Lead Hydrographer
-            </span>
-          </div>
+        <div className="flex items-center gap-2 pl-2 border-l border-slate-800/80">
+          {currentUser ? (
+            <div className="flex items-center gap-2">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-950/80 border border-cyan-500/60 text-cyan-300 font-mono-code font-bold text-xs"
+                title={`Logged in as ${currentUser.username} (${currentUser.email})`}
+              >
+                {currentUser.username.substring(0, 2).toUpperCase()}
+              </div>
+              <div className="hidden xl:flex flex-col">
+                <span className="text-xs font-semibold text-slate-200 leading-tight">
+                  {currentUser.username}
+                </span>
+                <span className="text-[10px] font-mono-code text-cyan-400 leading-tight">
+                  Operator • ID #{currentUser.id}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  className="p-1.5 rounded text-slate-400 hover:text-red-400 hover:bg-slate-900/80 transition-colors"
+                  title="Sign out / Switch operator"
+                  aria-label="Sign out"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 border border-slate-700 text-slate-400">
+                <User className="h-4 w-4" />
+              </div>
+              <div className="hidden xl:flex flex-col">
+                <span className="text-xs font-semibold text-slate-300 leading-tight">
+                  Guest Operator
+                </span>
+                <span className="text-[10px] font-mono-code text-slate-500 leading-tight">
+                  Read-Only Mode
+                </span>
+              </div>
+              {onOpenAuth && (
+                <button
+                  onClick={onOpenAuth}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-500/20 border border-cyan-500/50 text-cyan-300 text-xs font-bold hover:bg-cyan-500/30 transition-colors"
+                  title="Sign in to authenticate"
+                >
+                  <LogIn className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Sign In</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>
