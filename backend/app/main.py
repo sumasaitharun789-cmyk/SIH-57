@@ -2,7 +2,7 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.error_handling import setup_error_handlers
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -16,10 +16,13 @@ from app.middleware.error_handling import setup_error_handlers
 settings = get_settings()
 
 
+from app.db.database import Base, engine, migrate_sqlite_schema
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: create tables on startup."""
+    """Application lifespan: create tables and apply migrations on startup."""
     Base.metadata.create_all(bind=engine)
+    migrate_sqlite_schema(engine)
     yield
 
 
@@ -53,3 +56,8 @@ app.include_router(health.router, prefix="/api")
 app.include_router(locations.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+
+# Alias /api/analytics/summary to dashboard.analytics_summary
+analytics_router = APIRouter(prefix="/analytics", tags=["analytics"])
+analytics_router.add_api_route("/summary", dashboard.analytics_summary, methods=["GET"])
+app.include_router(analytics_router, prefix="/api")

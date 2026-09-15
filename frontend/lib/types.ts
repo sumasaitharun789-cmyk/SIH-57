@@ -4,6 +4,11 @@ export type VerificationStatus = 'VERIFIED' | 'REVIEW' | 'REJECTED';
 
 export type AnomalyCategory =
   | 'Ghost Net'
+  | 'Fishing Gear'
+  | 'Pipe / Cylinder'
+  | 'Shipwreck'
+  | 'Other Debris'
+  | 'Suspicious Object'
   | 'Metal Object'
   | 'Plastic Debris'
   | 'Rock / Natural Feature'
@@ -30,15 +35,24 @@ export interface SonarBoundingBox {
 
 export interface Detection {
   id: string;
+  numericId?: number;
+  uploadedFileId?: number;
   name: string;
   category: AnomalyCategory;
   confidence: number;
   fusedConfidence: number;
   priority: PriorityLevel;
+  riskLevel?: PriorityLevel | string;
   status: VerificationStatus;
   depth: number; // meters
   range: number; // meters from towfish
   track: 'Port' | 'Starboard';
+  acrossTrack?: number; // meters
+  alongTrack?: number; // meters
+  heading?: number; // degrees
+  imageUrl?: string;
+  boundingBox?: any;
+  evidenceFlags?: any;
   coordinates: {
     lat: number;
     lng: number;

@@ -16,6 +16,7 @@ from app.services.dashboard_service import (
     get_report_summary,
     get_recent_detections,
     get_location_summary,
+    get_analytics_summary,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -81,4 +82,14 @@ def location_summary(
     Returns total locations and count with detections.
     """
     summary = get_location_summary(db, current_user.id)
+    return summary
+
+
+@router.get("/analytics", response_model=dict)
+def analytics_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get rich analytics aggregation for the authenticated user."""
+    summary = get_analytics_summary(db, current_user.id)
     return summary

@@ -85,6 +85,13 @@ class Detection(Base):
     confidence: Mapped[float | None] = mapped_column(Numeric(5, 4), nullable=True)
     risk_level: Mapped[RiskLevel] = mapped_column(SQLEnum(RiskLevel), default=RiskLevel.UNKNOWN, nullable=False)
     status: Mapped[DetectionStatus] = mapped_column(SQLEnum(DetectionStatus), default=DetectionStatus.PENDING, nullable=False)
+    depth: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    range_m: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    along_track_m: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    across_track_m: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
+    heading_deg: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    bounding_box: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships

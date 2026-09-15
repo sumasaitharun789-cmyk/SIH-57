@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar, { NavSection } from '../components/Sidebar';
 import Topbar from '../components/Topbar';
@@ -17,7 +18,7 @@ import UploadSonar from '../components/UploadSonar';
 import AlertPanel from '../components/AlertPanel';
 import DetectionModal from '../components/DetectionModal';
 import SettingsPanel from '../components/SettingsPanel';
-import LandingIntro from '../components/LandingIntro';
+import LandingPage from '../components/LandingPage';
 import AuthModal from '../components/AuthModal';
 
 import {
@@ -56,6 +57,7 @@ import {
 } from 'lucide-react';
 
 export default function Home() {
+  const router = useRouter();
   const [hasEntered, setHasEntered] = useState<boolean>(false);
   const [currentSection, setCurrentSection] = useState<NavSection>('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -193,6 +195,14 @@ export default function Home() {
         });
     }
 
+    // Auto-enter mission control if URL parameter ?enter=true is present
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('enter') === 'true') {
+        router.push('/dashboard');
+      }
+    }
+
     return () => {
       window.removeEventListener('pulsedepth_auth_change', handleAuthChange);
     };
@@ -201,6 +211,7 @@ export default function Home() {
   const handleLogout = () => {
     api.auth.logout();
     setCurrentUser(null);
+    setHasEntered(false);
   };
 
   const handleCreateReport = async (e: React.FormEvent) => {
@@ -370,14 +381,13 @@ ${detections
     }
   };
 
-  // If entry screen is active
+  // If entry screen / landing portal is active
   if (!hasEntered) {
     return (
       <>
-        <LandingIntro
-          onEnterDashboard={() => setHasEntered(true)}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
-          isAuthenticated={!!currentUser}
+        <LandingPage
+          currentUser={currentUser}
+          onEnterMissionControl={() => router.push('/dashboard')}
         />
         <AuthModal
           isOpen={isAuthModalOpen}
@@ -385,7 +395,7 @@ ${detections
           onSuccess={(user: UserProfile) => {
             setCurrentUser(user);
             setIsAuthModalOpen(false);
-            setHasEntered(true);
+            router.push('/dashboard');
             fetchAllBackendData();
           }}
         />
@@ -426,6 +436,7 @@ ${detections
           currentUser={currentUser}
           onOpenAuth={() => setIsAuthModalOpen(true)}
           onLogout={handleLogout}
+          onBackToPortal={() => setHasEntered(false)}
         />
 
         {/* Scrollable Main Content Area */}

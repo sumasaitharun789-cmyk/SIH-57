@@ -30,4 +30,13 @@ class DetectionResponse(BaseModel):
     # Optional detections from the ML result (as dictionaries)
     detections: List[Dict[str, Any]] = []
     
+    uploaded_file_id: Optional[int] = None
+    depth: Optional[float] = None
+    range_m: Optional[float] = None
+    along_track_m: Optional[float] = None
+    across_track_m: Optional[float] = None
+    heading_deg: Optional[float] = None
+    bounding_box: Optional[Dict[str, Any]] = None
+    evidence: Optional[Dict[str, Any]] = None
+    
     model_config = ConfigDict(from_attributes=True)

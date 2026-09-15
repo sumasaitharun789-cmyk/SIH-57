@@ -15,6 +15,7 @@ import {
   Menu,
   LogOut,
   LogIn,
+  Globe,
 } from 'lucide-react';
 import { TelemetryData } from '../lib/types';
 import { toggleAudioMute, getAudioMuteState, playSonarPing } from '../lib/audioUtils';
@@ -29,6 +30,7 @@ interface TopbarProps {
   currentUser?: UserProfile | null;
   onOpenAuth?: () => void;
   onLogout?: () => void;
+  onBackToPortal?: () => void;
 }
 
 export default function Topbar({
@@ -40,6 +42,7 @@ export default function Topbar({
   currentUser,
   onOpenAuth,
   onLogout,
+  onBackToPortal,
 }: TopbarProps) {
   const [timeStr, setTimeStr] = useState<string>('');
   const [isMuted, setIsMuted] = useState(false);
@@ -148,6 +151,18 @@ export default function Topbar({
 
       {/* Right side: Audio Ping, Alerts, Settings, Profile, Clock */}
       <div className="flex items-center gap-2 md:gap-3 shrink-0 pl-2">
+        {/* Return to Landing Portal Button */}
+        {onBackToPortal && (
+          <button
+            onClick={onBackToPortal}
+            className="flex items-center gap-1.5 rounded border border-cyan-900/60 bg-cyan-950/40 px-2.5 py-1 text-xs font-mono-code text-cyan-300 hover:border-cyan-400 hover:bg-cyan-900/60 transition-colors"
+            title="Return to Landing Portal"
+          >
+            <Globe className="h-3.5 w-3.5 text-cyan-400" />
+            <span className="hidden lg:inline">PORTAL</span>
+          </button>
+        )}
+
         {/* Live Clock */}
         <div className="hidden md:flex items-center gap-1.5 rounded bg-slate-950/70 px-2.5 py-1 text-xs font-mono-code text-cyan-300 border border-cyan-900/50">
           <Clock className="h-3.5 w-3.5 text-cyan-400 animate-pulse" />

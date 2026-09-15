@@ -135,10 +135,22 @@ def create_detection(
         # Step 7: Assess risk using the risk service
         risk = calculate_risk_from_prediction(ml_result)
 
-        # Step 8: Store prediction data
+        # Step 8: Store prediction data and sonar parameters
+        import json
+        meta = ml_result.get("metadata", {}) if isinstance(ml_result, dict) else {}
         db_detection.prediction = prediction
         db_detection.confidence = risk["risk_score"]
         db_detection.risk_level = risk["risk_level"]
+        db_detection.depth = meta.get("depth", 18.4)
+        db_detection.range_m = meta.get("range_m", 48.5)
+        db_detection.across_track_m = meta.get("across_track_m", 32.4)
+        db_detection.along_track_m = meta.get("along_track_m", 16.1)
+        db_detection.heading_deg = meta.get("heading_deg", 88.5)
+
+        if "bounding_box" in meta and meta["bounding_box"]:
+            db_detection.bounding_box = json.dumps(meta["bounding_box"])
+        if "evidence" in meta and meta["evidence"]:
+            db_detection.evidence = json.dumps(meta["evidence"])
 
         # Step 9: Set status to completed
         db_detection.status = "completed"
@@ -174,6 +186,30 @@ def create_detection(
                     }
                 )
 
+    import json
+    bbox_dict = None
+    if db_detection.bounding_box:
+        try:
+            bbox_dict = json.loads(db_detection.bounding_box)
+        except Exception:
+            bbox_dict = None
+    elif detections_list and len(detections_list) > 0:
+        bbox_dict = detections_list[0].get("bbox")
+
+    evidence_dict = None
+    if db_detection.evidence:
+        try:
+            evidence_dict = json.loads(db_detection.evidence)
+        except Exception:
+            evidence_dict = None
+    if not evidence_dict:
+        evidence_dict = {
+            "ai_detection": True,
+            "acoustic_shadow": True,
+            "shape_characteristics": True,
+            "texture_characteristics": True,
+        }
+
     # Step 11: Return DetectionResponse
     return DetectionResponse(
         id=db_detection.id,
@@ -188,6 +224,14 @@ def create_detection(
         status=db_detection.status,
         created_at=db_detection.created_at,
         detections=detections_list,
+        uploaded_file_id=db_detection.uploaded_file_id,
+        depth=float(db_detection.depth) if db_detection.depth is not None else 18.4,
+        range_m=float(db_detection.range_m) if db_detection.range_m is not None else 48.5,
+        along_track_m=float(db_detection.along_track_m) if db_detection.along_track_m is not None else 16.1,
+        across_track_m=float(db_detection.across_track_m) if db_detection.across_track_m is not None else 32.4,
+        heading_deg=float(db_detection.heading_deg) if db_detection.heading_deg is not None else 88.5,
+        bounding_box=bbox_dict,
+        evidence=evidence_dict,
     )
 
 
@@ -218,6 +262,28 @@ def list_detections(
             if det.location_id
             else None
         )
+        import json
+        bbox_dict = None
+        if det.bounding_box:
+            try:
+                bbox_dict = json.loads(det.bounding_box)
+            except Exception:
+                bbox_dict = None
+
+        evidence_dict = None
+        if det.evidence:
+            try:
+                evidence_dict = json.loads(det.evidence)
+            except Exception:
+                evidence_dict = None
+        if not evidence_dict:
+            evidence_dict = {
+                "ai_detection": True,
+                "acoustic_shadow": True,
+                "shape_characteristics": True,
+                "texture_characteristics": True,
+            }
+
         items.append(
             {
                 "id": det.id,
@@ -233,6 +299,14 @@ def list_detections(
                 "longitude": float(loc.longitude) if loc and loc.longitude is not None else None,
                 "status": det.status,
                 "created_at": det.created_at,
+                "uploaded_file_id": det.uploaded_file_id,
+                "depth": float(det.depth) if det.depth is not None else 18.4,
+                "range_m": float(det.range_m) if det.range_m is not None else 48.5,
+                "along_track_m": float(det.along_track_m) if det.along_track_m is not None else 16.1,
+                "across_track_m": float(det.across_track_m) if det.across_track_m is not None else 32.4,
+                "heading_deg": float(det.heading_deg) if det.heading_deg is not None else 88.5,
+                "bounding_box": bbox_dict,
+                "evidence": evidence_dict,
             }
         )
 
@@ -272,6 +346,28 @@ def get_detection(
         else None
     )
 
+    import json
+    bbox_dict = None
+    if db_detection.bounding_box:
+        try:
+            bbox_dict = json.loads(db_detection.bounding_box)
+        except Exception:
+            bbox_dict = None
+
+    evidence_dict = None
+    if db_detection.evidence:
+        try:
+            evidence_dict = json.loads(db_detection.evidence)
+        except Exception:
+            evidence_dict = None
+    if not evidence_dict:
+        evidence_dict = {
+            "ai_detection": True,
+            "acoustic_shadow": True,
+            "shape_characteristics": True,
+            "texture_characteristics": True,
+        }
+
     return DetectionResponse(
         id=db_detection.id,
         prediction=db_detection.prediction,
@@ -286,4 +382,12 @@ def get_detection(
         longitude=float(loc.longitude) if loc and loc.longitude is not None else None,
         status=db_detection.status,
         created_at=db_detection.created_at,
+        uploaded_file_id=db_detection.uploaded_file_id,
+        depth=float(db_detection.depth) if db_detection.depth is not None else 18.4,
+        range_m=float(db_detection.range_m) if db_detection.range_m is not None else 48.5,
+        along_track_m=float(db_detection.along_track_m) if db_detection.along_track_m is not None else 16.1,
+        across_track_m=float(db_detection.across_track_m) if db_detection.across_track_m is not None else 32.4,
+        heading_deg=float(db_detection.heading_deg) if db_detection.heading_deg is not None else 88.5,
+        bounding_box=bbox_dict,
+        evidence=evidence_dict,
     )

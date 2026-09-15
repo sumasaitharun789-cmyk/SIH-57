@@ -9,11 +9,12 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import get_current_user
+from app.core.security import get_current_user, decode_access_token
 from app.db.database import get_db, engine
 from app.db.models import User, UploadedFile
 from app.schemas.upload import UploadedFileResponse, UploadedFileCreate
@@ -197,3 +198,49 @@ async def delete_file(
     db.commit()
 
     return {"detail": "File deleted successfully"}
+
+
+@router.get("/raw/{file_id}")
+async def get_raw_file(
+    file_id: int,
+    token: Optional[str] = Query(None),
+    request: Request = None,
+    db: Session = Depends(get_db),
+):
+    """Retrieve raw image file stream. Accepts Bearer header or ?token= query parameter."""
+    auth_header = request.headers.get("Authorization") if request else None
+    jwt_token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        jwt_token = auth_header.split(" ")[1]
+    elif token:
+        jwt_token = token
+
+    if not jwt_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        payload = decode_access_token(jwt_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid or expired token: {str(e)}")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+
+    db_file = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.id == file_id)
+        .first()
+    )
+    if db_file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    storage_path = Path(db_file.storage_path)
+    if not storage_path.exists():
+        raise HTTPException(status_code=404, detail="Physical file not found on disk")
+
+    return FileResponse(
+        path=str(storage_path),
+        media_type=db_file.content_type or "image/jpeg",
+        filename=db_file.original_filename,
+    )

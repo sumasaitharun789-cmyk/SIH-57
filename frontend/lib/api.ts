@@ -64,6 +64,48 @@ export interface BackendDetectionResponse {
   location_id?: number;
   latitude?: number;
   longitude?: number;
+  uploaded_file_id?: number;
+  depth?: number;
+  range_m?: number;
+  along_track_m?: number;
+  across_track_m?: number;
+  heading_deg?: number;
+  bounding_box?: { x: number; y: number; width: number; height: number };
+  evidence?: {
+    ai_detection?: boolean;
+    acoustic_shadow?: boolean;
+    shape_characteristics?: boolean;
+    texture_characteristics?: boolean;
+  };
+}
+
+export interface BackendAnalyticsSummary {
+  is_demo: boolean;
+  total_detections: number;
+  average_confidence: number;
+  high_risk_count: number;
+  by_class: Record<string, number>;
+  by_risk: {
+    low: number;
+    medium: number;
+    high: number;
+  };
+  confidence_distribution: {
+    '90_100': number;
+    '80_90': number;
+    '70_80': number;
+    '60_70': number;
+    below_60: number;
+  };
+  over_time: Array<{
+    date: string;
+    count: number;
+    ghost_net?: number;
+    shipwreck?: number;
+    fishing_gear?: number;
+    pipe?: number;
+    other_debris?: number;
+  }>;
 }
 
 export interface BackendReport {
@@ -338,6 +380,12 @@ export const api = {
         file_id: data.file_id || data.id,
       };
     },
+
+    getRawImageUrl: (fileId: number): string => {
+      const base = getApiBase();
+      const token = authUtils.getToken();
+      return `${base}/api/files/raw/${fileId}${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    },
   },
 
   detections: {
@@ -426,6 +474,16 @@ export const api = {
       return apiRequest(`/api/dashboard/recent-detections?limit=${limit}`);
     },
   },
+
+  analytics: {
+    getSummary: async (): Promise<BackendAnalyticsSummary> => {
+      try {
+        return await apiRequest<BackendAnalyticsSummary>('/api/dashboard/analytics');
+      } catch {
+        return await apiRequest<BackendAnalyticsSummary>('/api/analytics/summary');
+      }
+    },
+  },
 };
 
 /**
@@ -453,13 +511,17 @@ export function adaptBackendDetection(
   let category: AnomalyCategory = 'Unknown Object';
   const predLower = (backendDet.prediction || '').toLowerCase();
   if (predLower.includes('net')) category = 'Ghost Net';
+  else if (predLower.includes('ship') || predLower.includes('wreck')) category = 'Shipwreck';
+  else if (predLower.includes('gear') || predLower.includes('trap')) category = 'Fishing Gear';
+  else if (predLower.includes('pipe') || predLower.includes('cylinder')) category = 'Pipe / Cylinder';
   else if (predLower.includes('metal') || predLower.includes('container') || predLower.includes('cargo')) category = 'Metal Object';
-  else if (predLower.includes('plastic') || predLower.includes('debris')) category = 'Plastic Debris';
+  else if (predLower.includes('plastic') || predLower.includes('debris') || predLower.includes('other')) category = 'Other Debris';
   else if (predLower.includes('tire') || predLower.includes('rubber')) category = 'Tire / Rubber';
   else if (predLower.includes('rock') || predLower.includes('natural')) category = 'Rock / Natural Feature';
   else if (predLower.includes('munition')) category = 'Munitions / Canister';
+  else if (predLower.includes('suspicious')) category = 'Suspicious Object';
   else if (backendDet.prediction && backendDet.prediction !== 'mock-detection') {
-    category = 'Unknown Object';
+    category = 'Other Debris';
   } else {
     category = 'Ghost Net';
   }
@@ -470,18 +532,54 @@ export function adaptBackendDetection(
 
   const lat = backendDet.latitude || fallbackTelemetry?.vesselPosition.lat || 12.8452;
   const lng = backendDet.longitude || fallbackTelemetry?.vesselPosition.lng || 80.1245;
-  const depth = fallbackTelemetry?.depth || 18.4;
+  const depth = backendDet.depth ?? fallbackTelemetry?.depth ?? 18.4;
+  const range = backendDet.range_m ?? (35.4 + (backendDet.id % 15));
+  const acrossTrack = backendDet.across_track_m ?? (25.0 + (backendDet.id % 10));
+  const alongTrack = backendDet.along_track_m ?? (15.0 + (backendDet.id % 5));
+  const heading = backendDet.heading_deg ?? 88.5;
+
+  const rawBbox = backendDet.bounding_box || (backendDet.detections && backendDet.detections.length > 0 ? backendDet.detections[0].bbox : null);
+
+  const sonarBoundingBox = rawBbox ? {
+    x: rawBbox.x > 100 ? Math.round((rawBbox.x / 640) * 100) : rawBbox.x,
+    y: rawBbox.y > 100 ? Math.round((rawBbox.y / 640) * 100) : rawBbox.y,
+    width: rawBbox.width > 100 ? Math.round((rawBbox.width / 640) * 100) : rawBbox.width,
+    height: rawBbox.height > 100 ? Math.round((rawBbox.height / 640) * 100) : rawBbox.height,
+    shadowLength: 24,
+  } : {
+    x: 25 + ((backendDet.id * 13) % 45),
+    y: 20 + ((backendDet.id * 17) % 50),
+    width: 22,
+    height: 18,
+    shadowLength: 24,
+  };
+
+  const evidenceFlags = {
+    aiDetection: backendDet.evidence?.ai_detection ?? true,
+    acousticShadow: backendDet.evidence?.acoustic_shadow ?? true,
+    shapeCharacteristics: backendDet.evidence?.shape_characteristics ?? true,
+    textureCharacteristics: backendDet.evidence?.texture_characteristics ?? true,
+  };
 
   return {
     id: `DET-0${backendDet.id}`,
+    numericId: backendDet.id,
+    uploadedFileId: backendDet.uploaded_file_id,
     name,
     category,
     confidence,
     fusedConfidence,
     priority,
+    riskLevel: priority,
+    imageUrl: backendDet.uploaded_file_id ? api.files.getRawImageUrl(backendDet.uploaded_file_id) : undefined,
+    boundingBox: rawBbox,
     status: backendDet.status === 'completed' ? 'VERIFIED' : 'REVIEW',
     depth,
-    range: 35.4 + (backendDet.id % 15),
+    range,
+    acrossTrack,
+    alongTrack,
+    heading,
+    evidenceFlags,
     track: backendDet.id % 2 === 0 ? 'Starboard' : 'Port',
     coordinates: {
       lat,
@@ -493,13 +591,7 @@ export function adaptBackendDetection(
       heightEstimate: 1.8 + ((backendDet.id % 3) * 0.4),
     },
     timestamp: backendDet.created_at ? new Date(backendDet.created_at).toUTCString() : new Date().toUTCString(),
-    sonarBoundingBox: {
-      x: 25 + ((backendDet.id * 13) % 45),
-      y: 20 + ((backendDet.id * 17) % 50),
-      width: 22,
-      height: 18,
-      shadowLength: 24,
-    },
+    sonarBoundingBox,
     evidence: {
       aiDetector: confidence,
       shadowAnalysis: Math.min(99, confidence - 2),
@@ -518,3 +610,5 @@ export function adaptBackendDetection(
       : 'Log anomaly coordinates for scheduled ROV survey clearance.',
   };
 }
+
+(api as any).adaptBackendDetection = adaptBackendDetection;
