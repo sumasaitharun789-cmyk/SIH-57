@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -52,8 +52,7 @@ export default function AuthModal({
         }
         await api.auth.register(username.trim(), email.trim(), password);
         // Automatically login after registration
-        await api.auth.login(username.trim(), password);
-        const me = await api.auth.getMe();
+        const me = await api.auth.login(username.trim(), password);
         playAlertChime();
         onSuccess(me);
         onClose();
@@ -61,8 +60,7 @@ export default function AuthModal({
         if (!username.trim() || !password) {
           throw new Error('Username and password are required.');
         }
-        await api.auth.login(username.trim(), password);
-        const me = await api.auth.getMe();
+        const me = await api.auth.login(username.trim(), password);
         playAlertChime();
         onSuccess(me);
         onClose();

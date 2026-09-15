@@ -1,9 +1,43 @@
 import { Detection, PriorityLevel, VerificationStatus, AnomalyCategory, TelemetryData } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const getApiBase = (): string => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname || '127.0.0.1';
+    return `http://${hostname}:8000`;
+  }
+  return 'http://127.0.0.1:8000';
+};
 
 const TOKEN_KEY = 'pulsedepth_auth_token';
 const USER_KEY = 'pulsedepth_auth_user';
+
+export function formatHttpError(status: number, detail: any, url: string): Error {
+  const cleanDetail = typeof detail === 'string' ? detail : detail?.detail || detail?.message || (detail ? JSON.stringify(detail) : '');
+  switch (status) {
+    case 401:
+      return new Error(`Authentication Error (401): ${cleanDetail || 'Invalid or expired operator credentials'}`);
+    case 403:
+      return new Error(`Access Forbidden (403): ${cleanDetail || 'Insufficient security privileges'}`);
+    case 404:
+      return new Error(`Resource Not Found (404): Target at ${url} does not exist`);
+    case 422:
+      return new Error(`Validation Error (422): ${cleanDetail || 'Invalid request payload'}`);
+    case 500:
+      return new Error(`Server Error (500): ${cleanDetail || 'Internal server error on FastAPI backend'}`);
+    default:
+      return new Error(`API Error (${status}): ${cleanDetail || 'Request failed'}`);
+  }
+}
+
+export function formatNetworkError(err: any, url: string): Error {
+  const base = getApiBase();
+  return new Error(
+    `Backend Unreachable: Failed to connect to ${url}. Ensure the FastAPI server is running on ${base}. (${err?.message || 'Connection refused'})`
+  );
+}
 
 export interface UserProfile {
   id: number;
@@ -73,12 +107,22 @@ export const authUtils = {
   isTokenExpired: (token: string): boolean => {
     try {
       const parts = token.split('.');
-      if (parts.length !== 3) return true;
-      const payload = JSON.parse(atob(parts[1]));
+      if (parts.length !== 3) return false;
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4 !== 0) {
+        base64 += '=';
+      }
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const payload = JSON.parse(jsonPayload);
       if (!payload.exp) return false;
       return Date.now() >= (payload.exp * 1000 - 5000);
     } catch {
-      return true;
+      return false; // Safe fallback: let backend perform authoritative validation
     }
   },
   getToken: (): string | null => {
@@ -93,17 +137,27 @@ export const authUtils = {
   },
   setToken: (token: string) => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem(TOKEN_KEY, token);
+      const cleanToken = token.startsWith('Bearer ') ? token.slice(7).trim() : token.trim();
+      localStorage.setItem(TOKEN_KEY, cleanToken);
+      localStorage.setItem('access_token', cleanToken);
       window.dispatchEvent(new Event('pulsedepth_auth_change'));
     }
   },
   clearSession: () => {
     if (typeof window !== 'undefined') {
+      const hadSession = !!(
+        localStorage.getItem(TOKEN_KEY) ||
+        localStorage.getItem('access_token') ||
+        localStorage.getItem('token') ||
+        localStorage.getItem(USER_KEY)
+      );
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem('access_token');
       localStorage.removeItem('token');
       localStorage.removeItem(USER_KEY);
-      window.dispatchEvent(new Event('pulsedepth_auth_change'));
+      if (hadSession) {
+        window.dispatchEvent(new Event('pulsedepth_auth_change'));
+      }
     }
   },
   getUser: (): UserProfile | null => {
@@ -139,7 +193,8 @@ async function apiRequest<T>(
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    const cleanToken = token.startsWith('Bearer ') ? token.slice(7).trim() : token.trim();
+    headers['Authorization'] = `Bearer ${cleanToken}`;
   }
 
   // Ensure Content-Type is application/json for all non-FormData request bodies
@@ -154,31 +209,34 @@ async function apiRequest<T>(
   }
 
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE}${cleanEndpoint}`;
+  const base = getApiBase();
+  const url = `${base}${cleanEndpoint}`;
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-    body,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+      body,
+    });
+  } catch (networkErr: any) {
+    throw formatNetworkError(networkErr, url);
+  }
 
   if (!response.ok) {
-    let errorDetail = `Request failed (${response.status})`;
+    let errData: any = null;
     try {
-      const errData = await response.json();
-      if (errData && errData.detail) {
-        errorDetail = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
-      }
+      errData = await response.json();
     } catch {
       // ignore
     }
 
-    // Auto clear session if token is rejected
-    if (response.status === 401) {
+    // Auto clear session if an authenticated request is rejected as unauthorized
+    if (response.status === 401 && token) {
       authUtils.clearSession();
     }
 
-    throw new Error(errorDetail);
+    throw formatHttpError(response.status, errData?.detail, url);
   }
 
   if (response.status === 204) {
@@ -207,22 +265,19 @@ export const api = {
       });
     },
 
-    login: async (username: string, password: string): Promise<{ access_token: string; token_type: string }> => {
+    login: async (username: string, password: string): Promise<UserProfile> => {
       const res = await apiRequest<{ access_token: string; token_type: string }>('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      if (res.access_token) {
-        authUtils.setToken(res.access_token);
-        try {
-          const profile = await api.auth.getMe();
-          authUtils.setUser(profile);
-        } catch {
-          // ignore
-        }
+      if (!res.access_token) {
+        throw new Error('Authentication response did not contain an access token.');
       }
-      return res;
+      authUtils.setToken(res.access_token);
+      const profile = await api.auth.getMe();
+      authUtils.setUser(profile);
+      return profile;
     },
 
     getMe: async (): Promise<UserProfile> => {
@@ -243,30 +298,38 @@ export const api = {
       const formData = new FormData();
       formData.append('file', file);
 
-      const token = authUtils.getToken();
-      if (!token) {
-        throw new Error('Operator authentication required. Please sign in or register.');
+      const rawToken = authUtils.getToken();
+      if (!rawToken) {
+        throw new Error('Operator authentication required. Please sign in or register before uploading sonar imagery.');
       }
+      const cleanToken = rawToken.startsWith('Bearer ') ? rawToken.slice(7).trim() : rawToken.trim();
       const headers: Record<string, string> = {
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${cleanToken}`
       };
 
-      const res = await fetch(`${API_BASE}/api/files/images`, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
+      const base = getApiBase();
+      const url = `${base}/api/files/images`;
+
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+        });
+      } catch (fetchErr: any) {
+        throw formatNetworkError(fetchErr, url);
+      }
 
       if (!res.ok) {
         if (res.status === 401) {
           authUtils.clearSession();
         }
-        let errText = `Upload failed (${res.status})`;
+        let errData: any = null;
         try {
-          const data = await res.json();
-          if (data && data.detail) errText = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          errData = await res.json();
         } catch {}
-        throw new Error(errText);
+        throw formatHttpError(res.status, errData?.detail, url);
       }
 
       const data = await res.json();

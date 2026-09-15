@@ -7,36 +7,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.security import create_access_token, decode_access_token, get_password_hash, verify_password
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    get_current_user,
+    get_password_hash,
+    verify_password,
+)
 from app.db.database import get_db
 from app.db.models import User
 from app.schemas.user import UserCreate, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-# Dependency for getting current user from JWT
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    """Dependency to get the current authenticated user from JWT token."""
-    authorization: str = request.headers.get("Authorization", "")
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    token = authorization.split(" ", 1)[1]
-    try:
-        payload = decode_access_token(token)
-        user_id: int = int(payload.get("sub"))
-    except (ValueError, Exception):
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
-
-    if not user.is_active:
-        raise HTTPException(status_code=401, detail="User account is disabled")
-
-    return user
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

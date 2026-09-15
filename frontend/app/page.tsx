@@ -155,6 +155,9 @@ export default function Home() {
   };
 
   const fetchAllBackendData = () => {
+    if (!api.auth.isAuthenticated()) {
+      return;
+    }
     fetchDashboardSummary();
     fetchDetections();
     fetchReports();
@@ -165,7 +168,9 @@ export default function Home() {
     const handleAuthChange = () => {
       const user = api.auth.getCachedUser();
       setCurrentUser(user);
-      fetchAllBackendData();
+      if (api.auth.isAuthenticated()) {
+        fetchAllBackendData();
+      }
     };
 
     window.addEventListener('pulsedepth_auth_change', handleAuthChange);
@@ -175,18 +180,18 @@ export default function Home() {
     if (cached) {
       setCurrentUser(cached);
     }
-    if (api.auth.getToken()) {
+    if (api.auth.isAuthenticated()) {
       api.auth
         .getMe()
-        .then((user) => setCurrentUser(user))
+        .then((user) => {
+          setCurrentUser(user);
+          fetchAllBackendData();
+        })
         .catch(() => {
           // Token expired or invalid
           setCurrentUser(null);
         });
     }
-
-    // 2. Fetch all backend services
-    fetchAllBackendData();
 
     return () => {
       window.removeEventListener('pulsedepth_auth_change', handleAuthChange);
